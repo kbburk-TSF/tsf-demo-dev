@@ -1,7 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Dashboard from "./components/Dashboard";
-import DatasetSelector from "./components/DatasetSelector";
 import DataUpload from "./components/DataUpload";
 import HealthCheck from "./components/HealthCheck";
 import JobsMonitor from "./components/JobsMonitor";
@@ -9,17 +8,18 @@ import JobsMonitor from "./components/JobsMonitor";
 export default function App() {
   return (
     <Router>
-      <nav>
-        <Link to="/">Home</Link> | <Link to="/dashboard">Dashboard</Link> |{" "}
+      <nav style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
+        <Link to="/">Dashboard</Link>
         <Link to="/upload">Upload CSV</Link>
-        <a href='/health'>Health</a>
-</nav>
+        <Link to="/health">Health</Link>
+        <Link to="/jobs">Jobs</Link>
+      </nav>
       <Routes>
-        <Route path="/" element={<h1>Home Page</h1>} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/" element={<Dashboard />} />
         <Route path="/upload" element={<DataUpload />} />
-        <Route path='/health' element={<HealthCheck />} />
-</Routes>
+        <Route path="/health" element={<HealthCheck />} />
+        <Route path="/jobs" element={<JobsMonitor />} />
+      </Routes>
     </Router>
   );
 }

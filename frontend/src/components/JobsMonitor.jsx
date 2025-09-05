@@ -1,37 +1,54 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import API_BASE from "../config";
 
 export default function JobsMonitor() {
   const [jobs, setJobs] = useState({});
-  const [error, setError] = useState("");
-
-  const loadJobs = () => {
-    fetch(`${API_BASE}/jobs`)
-      .then((res) => res.json())
-      .then((data) => setJobs(data))
-      .catch((err) => setError(err.message));
-  };
 
   useEffect(() => {
-    loadJobs();
-    const interval = setInterval(loadJobs, 5000);
-    return () => clearInterval(interval);
+    fetch(`${API_BASE}/jobs`)
+      .then((res) => res.json())
+      .then(setJobs)
+      .catch(() => setJobs({}));
   }, []);
 
-  if (error) return <div>Error: {error}</div>;
+  const jobList = Object.entries(jobs);
+
   return (
     <div>
-      <h2>Upload Jobs</h2>
-      <button onClick={loadJobs}>Refresh</button>
-      <ul>
-        {Object.keys(jobs).length === 0 && <li>No jobs yet</li>}
-        {Object.entries(jobs).map(([id, job]) => (
-          <li key={id}>
-            Job {id}: {job.status}, {job.progress}% ({job.inserted}/{job.total})
-            {job.message && <span style={{color:"red"}}> - {job.message}</span>}
-          </li>
-        ))}
-      </ul>
+      <h2>Jobs Monitor</h2>
+      {jobList.length === 0 && <p>No jobs found</p>}
+      {jobList.length > 0 && (
+        <table border="1" cellPadding="5">
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Status</th>
+              <th>Progress</th>
+              <th>Inserted</th>
+              <th>Total</th>
+              <th>Failed</th>
+              <th>Message</th>
+              <th>Created</th>
+              <th>Finished</th>
+            </tr>
+          </thead>
+          <tbody>
+            {jobList.map(([id, job]) => (
+              <tr key={id}>
+                <td>{id}</td>
+                <td>{job.status}</td>
+                <td>{job.progress}%</td>
+                <td>{job.inserted}</td>
+                <td>{job.total}</td>
+                <td>{job.failed}</td>
+                <td>{job.message ?? ""}</td>
+                <td>{job.created}</td>
+                <td>{job.finished ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
