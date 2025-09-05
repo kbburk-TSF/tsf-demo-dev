@@ -7,6 +7,7 @@ export default function DataUpload() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [failedFile, setFailedFile] = useState(null);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -30,6 +31,17 @@ export default function DataUpload() {
       setProgress(data.progress || 0);
       setStatus(data.status);
       if (data.message) setError(data.message);
+
+      if (data.failed > 0 && (data.inserted || 0) === 0 && data.status === "complete") {
+        setError(`${data.failed} rows failed. Upload rejected.`);
+        setFailedFile(`/failed/${job_id}`);
+      } else if (data.failed > 0 && data.status === "complete") {
+        setStatus(`${data.failed} rows failed. ${(data.inserted || 0)} uploaded.`);
+        setFailedFile(`/failed/${job_id}`);
+      } else if (data.status === "complete") {
+        setStatus("Upload complete! ✅");
+      }
+
       if (data.status === "complete" || data.status === "error") {
         evtSource.close();
       }
@@ -49,6 +61,11 @@ export default function DataUpload() {
         <p>{status}</p>
         {error && <p style={{ color: "red" }}>{error}</p>}
         {status === "complete" && <p style={{ color: "green" }}>✅ Upload complete!</p>}
+        {failedFile && (
+          <a href={`${API_BASE}${failedFile}`} target="_blank" rel="noopener noreferrer">
+            Download failed rows
+          </a>
+        )}
       </div>
     </div>
   );

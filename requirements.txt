@@ -5,3 +5,4 @@ statsmodels
 sqlalchemy
 psycopg2
 python-multipart
+python-dateutil
