@@ -31,13 +31,27 @@ export default function DataUpload() {
       <h2>Upload CSV</h2>
       <input type="file" onChange={(e) => setFile(e.target.files[0])} />
       <button onClick={handleUpload}>Upload</button>
+
       {status && (
-        <div>
+        <div style={{ marginTop: "1rem" }}>
+          <h3>Upload Status</h3>
           <p>Status: {status.status}</p>
-          <p>Inserted: {status.inserted}</p>
+          <p>
+            Inserted: {status.inserted} / {status.total}
+          </p>
           <p>Failed: {status.failed}</p>
-          <p>Total: {status.total}</p>
           {status.message && <p>{status.message}</p>}
+
+          <div style={{ border: "1px solid #ccc", width: "100%", height: "20px", marginTop: "0.5rem" }}>
+            <div
+              style={{
+                width: `${status.progress || 0}%`,
+                height: "100%",
+                backgroundColor: "#4caf50",
+              }}
+            ></div>
+          </div>
+          <p>{status.progress || 0}% complete</p>
         </div>
       )}
     </div>
