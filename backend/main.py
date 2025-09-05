@@ -30,7 +30,7 @@ def health():
     error_msg = None
     try:
         session = SessionLocal()
-        session.execute(text("SELECT 1"))  # ✅ fixed for SQLAlchemy 2.x
+        session.execute(text("SELECT 1"))  # fixed for SQLAlchemy 2.x
         db_ok = True
 
         inspector = inspect(engine)
