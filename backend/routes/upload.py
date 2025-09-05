@@ -1,154 +1,70 @@
-import asyncio
+import os
 import csv
 import io
-import uuid
-import json
-import os
-from fastapi import APIRouter, UploadFile, Form, Depends
-from fastapi.responses import StreamingResponse, FileResponse
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
-from backend.db import SessionLocal, AirQuality
+from fastapi import APIRouter, UploadFile, Form
+from fastapi.responses import JSONResponse, FileResponse
+from dateutil import parser
 from datetime import datetime
-from dateutil import parser as dateparser
 
 router = APIRouter()
-jobs = {}
-FAILED_DIR = "failed_uploads"
+
+FAILED_DIR = "data/failed_uploads"
 os.makedirs(FAILED_DIR, exist_ok=True)
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+EXPECTED_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"  # Adjust to match schema
 
-# Flexible date parser
-def parse_date_safe(value: str):
-    if not value:
-        return None
-    formats = ["%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%d/%m/%y"]
-    for fmt in formats:
-        try:
-            return datetime.strptime(value, fmt).date()
-        except ValueError:
-            continue
+def normalize_date(value: str) -> str:
     try:
-        return dateparser.parse(value).date()
+        dt = parser.parse(value, fuzzy=True)
+        return dt.strftime(EXPECTED_DATE_FORMAT)
     except Exception:
-        raise ValueError(f"Unrecognized date format: {value}")
+        return None
 
-@router.post("/upload-csv")
-async def upload_csv(file: UploadFile, target_db: str = Form(...), db: Session = Depends(get_db)):
-    job_id = str(uuid.uuid4())
-    jobs[job_id] = {
-        "status": "started",
-        "progress": 0,
-        "inserted": 0,
-        "total": 0,
-        "failed": 0,
-        "created": datetime.utcnow().isoformat()
+@router.post("/upload")
+async def upload_csv(dataset: str = Form(...), file: UploadFile = None):
+    if not file:
+        return JSONResponse({"error": "No file uploaded"}, status_code=400)
+
+    success_rows = []
+    failed_rows = []
+
+    content = await file.read()
+    content_str = content.decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(content_str))
+
+    for row in reader:
+        row_copy = row.copy()
+        # Assume first column is date (adjust to your schema)
+        for key in row.keys():
+            if "date" in key.lower() or "time" in key.lower():
+                normalized = normalize_date(row[key])
+                if normalized:
+                    row_copy[key] = normalized
+                else:
+                    failed_rows.append(row)
+                    break
+        else:
+            success_rows.append(row_copy)
+
+    # Save failed rows if any
+    failed_file_url = None
+    if failed_rows:
+        failed_path = os.path.join(FAILED_DIR, f"failed_{file.filename}")
+        with open(failed_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=reader.fieldnames)
+            writer.writeheader()
+            writer.writerows(failed_rows)
+        failed_file_url = f"/download_failed/{os.path.basename(failed_path)}"
+
+    return {
+        "success": len(success_rows),
+        "failed": len(failed_rows),
+        "failedFile": failed_file_url
     }
 
-    contents = await file.read()
-    rows = list(csv.DictReader(io.StringIO(contents.decode("utf-8"))))
-    total = len(rows)
-    jobs[job_id]["total"] = total
-
-    async def process_job():
-        jobs[job_id]["status"] = "validating headers"
-        await asyncio.sleep(1)
-
-        failed_rows = []
-        batch_size = 500
-        inserted = 0
-        jobs[job_id]["status"] = "inserting"
-        for i in range(0, total, batch_size):
-            batch = rows[i:i+batch_size]
-            objs = []
-            for row in batch:
-                try:
-                    obj = AirQuality(
-                        date_local=parse_date_safe(row["Date Local"]),
-                        parameter_name=row["Parameter Name"],
-                        arithmetic_mean=float(row["Arithmetic Mean"]),
-                        local_site_name=row.get("Local Site Name"),
-                        state_name=row.get("State Name"),
-                        county_name=row.get("County Name"),
-                        city_name=row.get("City Name"),
-                        cbsa_name=row.get("CBSA Name")
-                    )
-                    objs.append(obj)
-                except Exception as e:
-                    failed_rows.append({**row, "error": str(e)})
-                    continue
-            try:
-                if objs:
-                    db.add_all(objs)
-                    db.commit()
-            except SQLAlchemyError as e:
-                db.rollback()
-                jobs[job_id]["status"] = "error"
-                jobs[job_id]["message"] = f"DB insert error: {str(e)}"
-                return
-            inserted += len(objs)
-            jobs[job_id]["inserted"] = inserted
-            jobs[job_id]["progress"] = int(inserted / total * 100)
-            jobs[job_id]["failed"] = len(failed_rows)
-            await asyncio.sleep(0)
-
-        # Save failed rows to CSV if any
-        if failed_rows:
-            fail_path = os.path.join(FAILED_DIR, f"failed_rows_{job_id}.csv")
-            with open(fail_path, "w", newline="", encoding="utf-8") as f:
-                # Write job metadata as header comments
-                f.write(f"# Job ID: {job_id}\n")
-                f.write(f"# Status: {jobs[job_id]['status']}\n")
-                f.write(f"# Inserted: {inserted} / {total}\n")
-                f.write(f"# Failed: {len(failed_rows)}\n")
-                f.write(f"# Created: {jobs[job_id]['created']}\n\n")
-                writer = csv.DictWriter(f, fieldnames=list(failed_rows[0].keys()))
-                writer.writeheader()
-                writer.writerows(failed_rows)
-            jobs[job_id]["message"] = f"{len(failed_rows)} rows failed. Download at /failed/{job_id}"
-
-        jobs[job_id]["progress"] = 100
-        jobs[job_id]["status"] = "complete"
-        jobs[job_id]["finished"] = datetime.utcnow().isoformat()
-
-    asyncio.create_task(process_job())
-    return {"job_id": job_id}
-
-@router.get("/upload-status/{job_id}")
-async def upload_status(job_id: str):
-    async def event_stream():
-        while True:
-            if job_id not in jobs:
-                yield "data: {\"error\": \"Job not found\"}\n\n"
-                break
-            job = jobs[job_id]
-            data = {
-                "status": job.get("status"),
-                "progress": job.get("progress"),
-                "inserted": job.get("inserted"),
-                "total": job.get("total"),
-                "failed": job.get("failed", 0),
-                "created": job.get("created"),
-                "finished": job.get("finished", None)
-            }
-            if "message" in job:
-                data["message"] = job["message"]
-            yield f"data: {json.dumps(data)}\n\n"
-            if job["status"] in ("complete", "error"):
-                break
-            await asyncio.sleep(1)
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-# Endpoint to download failed rows CSV
-@router.get("/failed/{job_id}")
-async def get_failed(job_id: str):
-    fail_path = os.path.join(FAILED_DIR, f"failed_rows_{job_id}.csv")
-    if os.path.exists(fail_path):
-        return FileResponse(fail_path, media_type="text/csv", filename=f"failed_rows_{job_id}.csv")
-    return {"error": "No failed rows file found for this job"}
+@router.get("/download_failed/{filename}")
+async def download_failed(filename: str):
+    path = os.path.join(FAILED_DIR, filename)
+    if os.path.exists(path):
+        return FileResponse(path, filename=filename)
+    return JSONResponse({"error": "File not found"}, status_code=404)
