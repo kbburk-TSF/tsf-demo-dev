@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.routes import upload
 from backend.db import Base, engine, SessionLocal, AirQuality
-from sqlalchemy import inspect
+from sqlalchemy import inspect, func
+from datetime import datetime
 
 app = FastAPI()
 
@@ -65,6 +66,33 @@ def rowcount():
         return {"rows": total}
     finally:
         session.close()
+
+# Stats endpoint
+@app.get("/stats")
+def stats():
+    session = SessionLocal()
+    try:
+        total = session.query(AirQuality).count()
+        earliest = session.query(func.min(AirQuality.date_local)).scalar()
+        latest = session.query(func.max(AirQuality.date_local)).scalar()
+        last_updated = datetime.utcnow().isoformat()
+        return {
+            "air_quality": {
+                "rows": total,
+                "earliest_date": str(earliest) if earliest else None,
+                "latest_date": str(latest) if latest else None,
+                "last_updated": last_updated
+            }
+        }
+    finally:
+        session.close()
+
+# Jobs endpoint (reads from upload.jobs)
+from backend.routes.upload import jobs
+
+@app.get("/jobs")
+def list_jobs():
+    return jobs
 
 # Include routes
 app.include_router(upload.router)

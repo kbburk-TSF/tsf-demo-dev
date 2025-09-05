@@ -4,6 +4,7 @@ import Dashboard from "./components/Dashboard";
 import DatasetSelector from "./components/DatasetSelector";
 import DataUpload from "./components/DataUpload";
 import HealthCheck from "./components/HealthCheck";
+import JobsMonitor from "./components/JobsMonitor";
 
 export default function App() {
   return (
@@ -17,7 +18,8 @@ export default function App() {
         <Route path="/" element={<h1>Home Page</h1>} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/upload" element={<DataUpload />} />
-      </Routes>
+        <Route path='/health' element={<HealthCheck />} />
+</Routes>
     </Router>
   );
 }
