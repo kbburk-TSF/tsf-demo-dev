@@ -4,15 +4,16 @@ import API_BASE from "../config";
 export default function DataUpload() {
   const [file, setFile] = useState(null);
   const [targetDb, setTargetDb] = useState("AirQuality");
-  const [status, setStatus] = useState(null);
-  const [jobId, setJobId] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file) return alert("Please select a file");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("target_db", targetDb);
@@ -21,18 +22,16 @@ export default function DataUpload() {
       method: "POST",
       body: formData,
     });
-    const data = await res.json();
-    setJobId(data.job_id);
-    pollStatus(data.job_id);
-  };
+    const { job_id } = await res.json();
 
-  const pollStatus = (id) => {
-    const eventSource = new EventSource(`${API_BASE}/upload-status/${id}`);
-    eventSource.onmessage = (event) => {
+    const evtSource = new EventSource(`${API_BASE}/upload-status/${job_id}`);
+    evtSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      setStatus(data);
+      setProgress(data.progress || 0);
+      setStatus(data.status);
+      if (data.message) setError(data.message);
       if (data.status === "complete" || data.status === "error") {
-        eventSource.close();
+        evtSource.close();
       }
     };
   };
@@ -41,24 +40,16 @@ export default function DataUpload() {
     <div>
       <h2>Upload CSV</h2>
       <select value={targetDb} onChange={(e) => setTargetDb(e.target.value)}>
-        <option value="AirQuality">AirQuality</option>
+        <option value="AirQuality">Air Quality</option>
       </select>
       <input type="file" onChange={handleFileChange} />
       <button onClick={handleUpload}>Upload</button>
-      {status && (
-        <div>
-          <p>Status: {status.status}</p>
-          <p>Progress: {status.progress}%</p>
-          <p>Inserted: {status.inserted} / {status.total}</p>
-          <p>Failed: {status.failed}</p>
-          {status.message && <p>{status.message}</p>}
-          {status.failed > 0 && jobId && (
-            <a href={`${API_BASE}/failed/${jobId}`} target="_blank" rel="noreferrer">
-              Download failed rows
-            </a>
-          )}
-        </div>
-      )}
+      <div>
+        <progress value={progress} max="100" />
+        <p>{status}</p>
+        {error && <p style={{ color: "red" }}>{error}</p>}
+        {status === "complete" && <p style={{ color: "green" }}>✅ Upload complete!</p>}
+      </div>
     </div>
   );
 }

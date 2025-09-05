@@ -42,7 +42,14 @@ def parse_date_safe(value: str):
 @router.post("/upload-csv")
 async def upload_csv(file: UploadFile, target_db: str = Form(...), db: Session = Depends(get_db)):
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "started", "progress": 0, "inserted": 0, "total": 0, "failed": 0}
+    jobs[job_id] = {
+        "status": "started",
+        "progress": 0,
+        "inserted": 0,
+        "total": 0,
+        "failed": 0,
+        "created": datetime.utcnow().isoformat()
+    }
 
     contents = await file.read()
     rows = list(csv.DictReader(io.StringIO(contents.decode("utf-8"))))
@@ -95,6 +102,12 @@ async def upload_csv(file: UploadFile, target_db: str = Form(...), db: Session =
         if failed_rows:
             fail_path = os.path.join(FAILED_DIR, f"failed_rows_{job_id}.csv")
             with open(fail_path, "w", newline="", encoding="utf-8") as f:
+                # Write job metadata as header comments
+                f.write(f"# Job ID: {job_id}\n")
+                f.write(f"# Status: {jobs[job_id]['status']}\n")
+                f.write(f"# Inserted: {inserted} / {total}\n")
+                f.write(f"# Failed: {len(failed_rows)}\n")
+                f.write(f"# Created: {jobs[job_id]['created']}\n\n")
                 writer = csv.DictWriter(f, fieldnames=list(failed_rows[0].keys()))
                 writer.writeheader()
                 writer.writerows(failed_rows)
@@ -102,6 +115,7 @@ async def upload_csv(file: UploadFile, target_db: str = Form(...), db: Session =
 
         jobs[job_id]["progress"] = 100
         jobs[job_id]["status"] = "complete"
+        jobs[job_id]["finished"] = datetime.utcnow().isoformat()
 
     asyncio.create_task(process_job())
     return {"job_id": job_id}
@@ -119,7 +133,9 @@ async def upload_status(job_id: str):
                 "progress": job.get("progress"),
                 "inserted": job.get("inserted"),
                 "total": job.get("total"),
-                "failed": job.get("failed", 0)
+                "failed": job.get("failed", 0),
+                "created": job.get("created"),
+                "finished": job.get("finished", None)
             }
             if "message" in job:
                 data["message"] = job["message"]
