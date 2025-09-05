@@ -4,23 +4,23 @@ import io
 from fastapi import APIRouter, UploadFile, Form
 from fastapi.responses import JSONResponse, FileResponse
 from dateutil import parser
-from datetime import datetime
 
-router = APIRouter()
+# keep the router named "jobs" so main.py import still works
+jobs = APIRouter()
 
 FAILED_DIR = "data/failed_uploads"
 os.makedirs(FAILED_DIR, exist_ok=True)
 
-EXPECTED_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"  # Adjust to match schema
+EXPECTED_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"  # Adjust for your schema
 
-def normalize_date(value: str) -> str:
+def normalize_date(value: str) -> str | None:
     try:
         dt = parser.parse(value, fuzzy=True)
         return dt.strftime(EXPECTED_DATE_FORMAT)
     except Exception:
         return None
 
-@router.post("/upload")
+@jobs.post("/upload")
 async def upload_csv(dataset: str = Form(...), file: UploadFile = None):
     if not file:
         return JSONResponse({"error": "No file uploaded"}, status_code=400)
@@ -34,7 +34,6 @@ async def upload_csv(dataset: str = Form(...), file: UploadFile = None):
 
     for row in reader:
         row_copy = row.copy()
-        # Assume first column is date (adjust to your schema)
         for key in row.keys():
             if "date" in key.lower() or "time" in key.lower():
                 normalized = normalize_date(row[key])
@@ -46,7 +45,6 @@ async def upload_csv(dataset: str = Form(...), file: UploadFile = None):
         else:
             success_rows.append(row_copy)
 
-    # Save failed rows if any
     failed_file_url = None
     if failed_rows:
         failed_path = os.path.join(FAILED_DIR, f"failed_{file.filename}")
@@ -59,10 +57,10 @@ async def upload_csv(dataset: str = Form(...), file: UploadFile = None):
     return {
         "success": len(success_rows),
         "failed": len(failed_rows),
-        "failedFile": failed_file_url
+        "failedFile": failed_file_url,
     }
 
-@router.get("/download_failed/{filename}")
+@jobs.get("/download_failed/{filename}")
 async def download_failed(filename: str):
     path = os.path.join(FAILED_DIR, filename)
     if os.path.exists(path):
