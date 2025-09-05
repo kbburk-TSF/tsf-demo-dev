@@ -24,6 +24,7 @@ export default function DataUpload() {
       setStatus("Uploading...");
       setError("");
       setProgress(0);
+      setFailedFile(null);
 
       const res = await fetch(`${API_BASE}/upload`, {
         method: "POST",
