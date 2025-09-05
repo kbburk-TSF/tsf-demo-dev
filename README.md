@@ -53,3 +53,46 @@ Use this as your Web Service start command on Render to ensure pip is up-to-date
 ```
 pip install --upgrade pip && pip install -r requirements.txt && python backend/init_db.py && uvicorn backend.main:app --host 0.0.0.0 --port 10000
 ```
+
+---
+
+# ⚙️ Database Connection
+
+This backend now reads `DATABASE_URL` from environment variables.
+
+On Render:
+1. Go to your Web Service → Environment → Add Environment Variable
+2. Key: `DATABASE_URL`
+3. Value: copy the **Internal Database URL** from your Render Postgres service
+   (e.g. `postgresql://tsf_user:tsf_pass@dpg-xxxxx:5432/tsf_demo`)
+
+No hardcoded `localhost` connections are used anymore.
+
+---
+
+# 🩺 Health Check Endpoint
+
+The backend exposes a simple health check:
+
+```
+GET /health
+→ {"status": "ok"}
+```
+
+Use this in Render to confirm the service is running.
+
+---
+
+# 🌐 Frontend Deployment (React + Vite)
+
+On Render:
+1. Create a **Static Site** service.
+2. Root Directory: `frontend`
+3. Build Command: `npm install && npm run build`
+4. Publish Directory: `dist`
+5. Add Environment Variable (to point to backend API):
+   ```
+   VITE_API_URL=https://tsf-demo-backend.onrender.com
+   ```
+
+This will serve the React dashboard that connects to your backend.

@@ -1,0 +1,10 @@
+services:
+  - type: static_site
+    name: tsf-demo-frontend
+    env: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://tsf-demo-backend.onrender.com
