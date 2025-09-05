@@ -4,3 +4,4 @@ pandas
 statsmodels
 sqlalchemy
 psycopg2
+python-multipart
