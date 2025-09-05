@@ -14,14 +14,14 @@ export default function DataUpload() {
     formData.append("target_db", targetDb);
 
     try {
-      const res = await fetch(`${API_BASE}/api/upload-csv`, {
+      const res = await fetch(`${API_BASE}/upload-csv`, {
         method: "POST",
         body: formData,
       });
       const { job_id } = await res.json();
 
       const eventSource = new EventSource(
-        `${API_BASE}/api/upload-status/${job_id}`
+        `${API_BASE}/upload-status/${job_id}`
       );
       eventSource.onmessage = (e) => {
         setMessages((prev) => [...prev, e.data]);
