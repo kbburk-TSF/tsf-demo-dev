@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.routes import upload
 from backend.db import Base, engine, SessionLocal, AirQuality
-from sqlalchemy import inspect, func
+from sqlalchemy import inspect, func, text
 from datetime import datetime
 
 app = FastAPI()
@@ -30,7 +30,7 @@ def health():
     error_msg = None
     try:
         session = SessionLocal()
-        session.execute("SELECT 1")
+        session.execute(text("SELECT 1"))  # ✅ fixed for SQLAlchemy 2.x
         db_ok = True
 
         inspector = inspect(engine)
