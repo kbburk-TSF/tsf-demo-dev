@@ -25,6 +25,7 @@ def on_startup():
 def health():
     db_ok = False
     schema_ok = False
+    row_count = None
     try:
         session = SessionLocal()
         session.execute("SELECT 1")
@@ -32,6 +33,9 @@ def health():
 
         inspector = inspect(engine)
         schema_ok = "air_quality" in inspector.get_table_names()
+
+        if schema_ok:
+            row_count = session.query(AirQuality).count()
     except Exception:
         db_ok = False
     finally:
@@ -41,7 +45,18 @@ def health():
         "status": "ok",
         "database": "up" if db_ok else "down",
         "schema": "ready" if schema_ok else "missing",
+        "rows": row_count
     }
+
+# Row count shortcut
+@app.get("/rowcount")
+def rowcount():
+    session = SessionLocal()
+    try:
+        total = session.query(AirQuality).count()
+        return {"rows": total}
+    finally:
+        session.close()
 
 # Include routes
 app.include_router(upload.router)

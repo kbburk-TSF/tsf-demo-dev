@@ -21,20 +21,24 @@ def get_db():
 @router.post("/upload-csv")
 async def upload_csv(file: UploadFile, target_db: str = Form(...), db: Session = Depends(get_db)):
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "started", "progress": 0}
+    jobs[job_id] = {"status": "started", "progress": 0, "inserted": 0, "total": 0}
 
     contents = await file.read()
     rows = list(csv.DictReader(io.StringIO(contents.decode("utf-8"))))
     total = len(rows)
+    jobs[job_id]["total"] = total
 
     async def process_job():
-        jobs[job_id]["status"] = "running"
+        jobs[job_id]["status"] = "validating headers"
+        await asyncio.sleep(1)
+
         batch_size = 500
         inserted = 0
+        jobs[job_id]["status"] = "inserting"
         for i in range(0, total, batch_size):
             batch = rows[i:i+batch_size]
             objs = []
-            for row in batch:
+            for idx, row in enumerate(batch):
                 try:
                     obj = AirQuality(
                         date_local=datetime.strptime(row["Date Local"], "%Y-%m-%d").date(),
@@ -47,15 +51,18 @@ async def upload_csv(file: UploadFile, target_db: str = Form(...), db: Session =
                         cbsa_name=row.get("CBSA Name")
                     )
                     objs.append(obj)
-                except Exception:
-                    continue
+                except Exception as e:
+                    jobs[job_id]["status"] = "error"
+                    jobs[job_id]["message"] = f"Row parse error: {str(e)}"
+                    return
             db.add_all(objs)
             db.commit()
             inserted += len(objs)
+            jobs[job_id]["inserted"] = inserted
             jobs[job_id]["progress"] = int(inserted / total * 100)
-            jobs[job_id]["status"] = "Inserting rows"
+            await asyncio.sleep(0)
         jobs[job_id]["progress"] = 100
-        jobs[job_id]["status"] = "Upload complete!"
+        jobs[job_id]["status"] = "complete"
 
     asyncio.create_task(process_job())
     return {"job_id": job_id}
@@ -67,10 +74,18 @@ async def upload_status(job_id: str):
             if job_id not in jobs:
                 yield "data: {\"error\": \"Job not found\"}\n\n"
                 break
-            status = jobs[job_id]["status"]
-            progress = jobs[job_id]["progress"]
-            yield f"data: {{\"progress\": {progress}, \"status\": \"{status}\"}}\n\n"
-            if status == "Upload complete!":
+            job = jobs[job_id]
+            data = {
+                "status": job.get("status"),
+                "progress": job.get("progress"),
+                "inserted": job.get("inserted"),
+                "total": job.get("total"),
+            }
+            if "message" in job:
+                data["message"] = job["message"]
+            import json
+            yield f"data: {json.dumps(data)}\n\n"
+            if job["status"] in ("complete", "error"):
                 break
             await asyncio.sleep(1)
     return StreamingResponse(event_stream(), media_type="text/event-stream")
