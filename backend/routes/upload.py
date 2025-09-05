@@ -8,9 +8,10 @@ from fastapi import APIRouter, UploadFile, Form, Depends
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from backend.db import SessionLocal, AirQuality, Health, Jobs  # assuming your models
+from backend.db import SessionLocal, AirQuality  # ✅ reverted to stable import
 from datetime import datetime
 from dateutil import parser as dateparser
+
 
 router = APIRouter()
 jobs = {}
