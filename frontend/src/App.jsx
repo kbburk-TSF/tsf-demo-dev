@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Dashboard from "./components/Dashboard";
 import DataUpload from "./components/DataUpload";
 import HealthCheck from "./components/HealthCheck";
@@ -9,10 +9,10 @@ export default function App() {
   return (
     <Router>
       <nav>
-        <a href="/">Dashboard</a>
-        <a href="/upload">Upload CSV</a>
-        <a href="/health">Health</a>
-        <a href="/jobs">Jobs</a>
+        <Link to="/">Dashboard</Link>
+        <Link to="/upload">Upload CSV</Link>
+        <Link to="/health">Health</Link>
+        <Link to="/jobs">Jobs</Link>
       </nav>
       <Routes>
         <Route path="/" element={<Dashboard />} />
