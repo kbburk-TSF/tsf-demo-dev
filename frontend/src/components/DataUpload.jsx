@@ -1,62 +1,60 @@
 import React, { useState } from "react";
-import API_URL from "../config";
+import API_BASE from "../config";
 
 export default function DataUpload() {
   const [file, setFile] = useState(null);
   const [targetDb, setTargetDb] = useState("AirQuality");
   const [messages, setMessages] = useState([]);
-  const [jobId, setJobId] = useState(null);
 
   const handleUpload = async () => {
-    if (!file) {
-      alert("Please select a CSV file first.");
-      return;
-    }
+    if (!file) return;
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("target_db", targetDb);
 
-    const res = await fetch(`${API_URL}/upload-csv`, {
-      method: "POST",
-      body: formData
-    });
-    const data = await res.json();
-    setJobId(data.job_id);
-    listenForUpdates(data.job_id);
-  };
+    try {
+      const res = await fetch(`${API_BASE}/api/upload-csv`, {
+        method: "POST",
+        body: formData,
+      });
+      const { job_id } = await res.json();
 
-  const listenForUpdates = (jobId) => {
-    const evtSource = new EventSource(`${API_URL}/upload-status/${jobId}`);
-    evtSource.onmessage = (e) => {
-      setMessages((prev) => [...prev, e.data]);
-      if (e.data.includes("Upload complete!") || e.data.includes("Error")) {
-        evtSource.close();
-      }
-    };
+      const eventSource = new EventSource(
+        `${API_BASE}/api/upload-status/${job_id}`
+      );
+      eventSource.onmessage = (e) => {
+        setMessages((prev) => [...prev, e.data]);
+        if (e.data === "Upload complete!") {
+          eventSource.close();
+        }
+      };
+      eventSource.onerror = (err) => {
+        setMessages((prev) => [...prev, "Error: Could not connect to backend"]);
+        eventSource.close();
+      };
+    } catch (err) {
+      setMessages((prev) => [...prev, `Error: ${err.message}`]);
+    }
   };
 
   return (
-    <div style={{ padding: "2rem" }}>
-      <h2>CSV Upload</h2>
-      <label>
-        Target Database:
-        <select value={targetDb} onChange={(e) => setTargetDb(e.target.value)}>
-          <option value="AirQuality">Air Quality</option>
-          <option value="Emissions">Emissions</option>
-        </select>
-      </label>
-      <br /><br />
-      <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files[0])} />
-      <br /><br />
-      <button onClick={handleUpload}>Upload CSV</button>
-
-      <h3>Status</h3>
-      <ul>
-        {messages.map((msg, idx) => (
-          <li key={idx}>{msg}</li>
-        ))}
-      </ul>
+    <div>
+      <h2>Upload CSV</h2>
+      <select value={targetDb} onChange={(e) => setTargetDb(e.target.value)}>
+        <option value="AirQuality">AirQuality</option>
+        <option value="Emissions">Emissions</option>
+      </select>
+      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+      <button onClick={handleUpload}>Upload</button>
+      <div>
+        <h3>Status</h3>
+        <ul>
+          {messages.map((msg, i) => (
+            <li key={i}>{msg}</li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
