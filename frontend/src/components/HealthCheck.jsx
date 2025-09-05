@@ -23,6 +23,7 @@ export default function HealthCheck() {
         <li>Database: {health.database}</li>
         <li>Schema: {health.schema}</li>
         <li>Rows in AirQuality: {health.rows ?? "N/A"}</li>
+        {health.error && <li>Error: {health.error}</li>}
       </ul>
     </div>
   );

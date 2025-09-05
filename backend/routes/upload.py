@@ -2,9 +2,11 @@ import asyncio
 import csv
 import io
 import uuid
+import json
 from fastapi import APIRouter, UploadFile, Form, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from backend.db import SessionLocal, AirQuality
 from datetime import datetime
 
@@ -55,8 +57,14 @@ async def upload_csv(file: UploadFile, target_db: str = Form(...), db: Session =
                     jobs[job_id]["status"] = "error"
                     jobs[job_id]["message"] = f"Row parse error: {str(e)}"
                     return
-            db.add_all(objs)
-            db.commit()
+            try:
+                db.add_all(objs)
+                db.commit()
+            except SQLAlchemyError as e:
+                db.rollback()
+                jobs[job_id]["status"] = "error"
+                jobs[job_id]["message"] = f"DB insert error: {str(e)}"
+                return
             inserted += len(objs)
             jobs[job_id]["inserted"] = inserted
             jobs[job_id]["progress"] = int(inserted / total * 100)
@@ -83,7 +91,6 @@ async def upload_status(job_id: str):
             }
             if "message" in job:
                 data["message"] = job["message"]
-            import json
             yield f"data: {json.dumps(data)}\n\n"
             if job["status"] in ("complete", "error"):
                 break

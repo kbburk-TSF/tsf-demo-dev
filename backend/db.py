@@ -1,4 +1,5 @@
 import os
+import time
 from sqlalchemy import Column, Integer, String, Float, Date, MetaData, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -7,9 +8,25 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Normalize scheme: postgres:// -> postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Retry DB connection
+engine = None
+max_retries = 20
+for attempt in range(max_retries):
+    try:
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
+        conn = engine.connect()
+        conn.close()
+        break
+    except Exception as e:
+        if attempt == max_retries - 1:
+            raise
+        time.sleep(3)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base(metadata=MetaData(schema=None))
 
 class AirQuality(Base):

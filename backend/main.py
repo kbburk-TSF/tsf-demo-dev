@@ -20,12 +20,13 @@ app.add_middleware(
 def on_startup():
     Base.metadata.create_all(bind=engine)
 
-# Health check
+# Health check with detailed errors
 @app.get("/health")
 def health():
     db_ok = False
     schema_ok = False
     row_count = None
+    error_msg = None
     try:
         session = SessionLocal()
         session.execute("SELECT 1")
@@ -36,17 +37,24 @@ def health():
 
         if schema_ok:
             row_count = session.query(AirQuality).count()
-    except Exception:
+    except Exception as e:
+        error_msg = str(e)
         db_ok = False
     finally:
-        session.close()
+        try:
+            session.close()
+        except:
+            pass
 
-    return {
+    result = {
         "status": "ok",
         "database": "up" if db_ok else "down",
         "schema": "ready" if schema_ok else "missing",
         "rows": row_count
     }
+    if error_msg:
+        result["error"] = error_msg
+    return result
 
 # Row count shortcut
 @app.get("/rowcount")
