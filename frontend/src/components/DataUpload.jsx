@@ -4,7 +4,8 @@ import API_BASE from "../config";
 export default function DataUpload() {
   const [file, setFile] = useState(null);
   const [targetDb, setTargetDb] = useState("AirQuality");
-  const [messages, setMessages] = useState([]);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState("");
 
   const handleUpload = async () => {
     if (!file) return;
@@ -20,21 +21,21 @@ export default function DataUpload() {
       });
       const { job_id } = await res.json();
 
-      const eventSource = new EventSource(
-        `${API_BASE}/upload-status/${job_id}`
-      );
+      const eventSource = new EventSource(`${API_BASE}/upload-status/${job_id}`);
       eventSource.onmessage = (e) => {
-        setMessages((prev) => [...prev, e.data]);
-        if (e.data === "Upload complete!") {
+        const data = JSON.parse(e.data);
+        setProgress(data.progress);
+        setStatus(data.status);
+        if (data.status === "Upload complete!") {
           eventSource.close();
         }
       };
-      eventSource.onerror = (err) => {
-        setMessages((prev) => [...prev, "Error: Could not connect to backend"]);
+      eventSource.onerror = () => {
+        setStatus("Error: Could not connect to backend");
         eventSource.close();
       };
     } catch (err) {
-      setMessages((prev) => [...prev, `Error: ${err.message}`]);
+      setStatus(`Error: ${err.message}`);
     }
   };
 
@@ -43,17 +44,13 @@ export default function DataUpload() {
       <h2>Upload CSV</h2>
       <select value={targetDb} onChange={(e) => setTargetDb(e.target.value)}>
         <option value="AirQuality">AirQuality</option>
-        <option value="Emissions">Emissions</option>
       </select>
       <input type="file" onChange={(e) => setFile(e.target.files[0])} />
       <button onClick={handleUpload}>Upload</button>
       <div>
         <h3>Status</h3>
-        <ul>
-          {messages.map((msg, i) => (
-            <li key={i}>{msg}</li>
-          ))}
-        </ul>
+        <progress value={progress} max="100"></progress>
+        <p>{status} ({progress}%)</p>
       </div>
     </div>
   );
