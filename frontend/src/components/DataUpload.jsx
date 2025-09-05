@@ -7,6 +7,7 @@ export default function DataUpload() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [failedFile, setFailedFile] = useState(null);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -14,42 +15,72 @@ export default function DataUpload() {
 
   const handleUpload = async () => {
     if (!file) return alert("Please select a file");
+
     const formData = new FormData();
+    formData.append("dataset", targetDb);
     formData.append("file", file);
-    formData.append("target_db", targetDb);
 
-    const res = await fetch(`${API_BASE}/upload-csv`, {
-      method: "POST",
-      body: formData,
-    });
-    const { job_id } = await res.json();
+    try {
+      setStatus("Uploading...");
+      setError("");
+      setProgress(0);
 
-    const evtSource = new EventSource(`${API_BASE}/upload-status/${job_id}`);
-    evtSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      setProgress(data.progress || 0);
-      setStatus(data.status);
-      if (data.message) setError(data.message);
-      if (data.status === "complete" || data.status === "error") {
-        evtSource.close();
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      setProgress(100);
+
+      if (res.ok) {
+        setFailedFile(data.failedFile);
+        if (data.failed > 0 && data.success === 0) {
+          setError(`${data.failed} rows failed. Upload rejected.`);
+        } else if (data.failed > 0) {
+          setStatus(`${data.failed} rows failed. ${data.success} uploaded.`);
+        } else {
+          setStatus("Upload complete! ✅");
+        }
+      } else {
+        setError(data.error || "Upload failed");
       }
-    };
+    } catch (err) {
+      setError("Upload failed. Check server logs.");
+    }
   };
 
   return (
-    <div>
+    <div style={{ padding: 20 }}>
       <h2>Upload CSV</h2>
       <select value={targetDb} onChange={(e) => setTargetDb(e.target.value)}>
         <option value="AirQuality">Air Quality</option>
+        <option value="Health">Health</option>
+        <option value="Jobs">Jobs</option>
       </select>
       <input type="file" onChange={handleFileChange} />
       <button onClick={handleUpload}>Upload</button>
-      <div>
-        <progress value={progress} max="100" />
-        <p>{status}</p>
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {status === "complete" && <p style={{ color: "green" }}>✅ Upload complete!</p>}
-      </div>
+
+      {progress > 0 && (
+        <div style={{ marginTop: 10, width: "100%", background: "#eee", height: "20px" }}>
+          <div
+            style={{
+              width: `${progress}%`,
+              background: "blue",
+              height: "100%",
+              transition: "width 0.3s",
+            }}
+          ></div>
+        </div>
+      )}
+
+      {status && <p style={{ color: "green" }}>{status}</p>}
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      {failedFile && (
+        <a href={`${API_BASE}${failedFile}`} target="_blank" rel="noopener noreferrer">
+          Download failed rows
+        </a>
+      )}
     </div>
   );
 }
