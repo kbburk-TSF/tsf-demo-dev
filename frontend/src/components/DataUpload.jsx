@@ -3,53 +3,43 @@ import API_BASE from "../config";
 
 export default function DataUpload() {
   const [file, setFile] = useState(null);
-  const [targetDb, setTargetDb] = useState("AirQuality");
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
-
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-  };
+  const [jobId, setJobId] = useState(null);
+  const [status, setStatus] = useState(null);
 
   const handleUpload = async () => {
-    if (!file) return alert("Please select a file");
+    if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("target_db", targetDb);
+    formData.append("target_db", "AirQuality");
+    const res = await fetch(`${API_BASE}/upload-csv`, { method: "POST", body: formData });
+    const data = await res.json();
+    setJobId(data.job_id);
+    pollStatus(data.job_id);
+  };
 
-    const res = await fetch(`${API_BASE}/upload-csv`, {
-      method: "POST",
-      body: formData,
-    });
-    const { job_id } = await res.json();
-
-    const evtSource = new EventSource(`${API_BASE}/upload-status/${job_id}`);
-    evtSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      setProgress(data.progress || 0);
-      setStatus(data.status);
-      if (data.message) setError(data.message);
-      if (data.status === "complete" || data.status === "error") {
-        evtSource.close();
-      }
-    };
+  const pollStatus = (id) => {
+    const interval = setInterval(async () => {
+      const res = await fetch(`${API_BASE}/upload-status/${id}`);
+      const data = await res.json();
+      setStatus(data);
+      if (data.status === "complete") clearInterval(interval);
+    }, 2000);
   };
 
   return (
     <div>
       <h2>Upload CSV</h2>
-      <select value={targetDb} onChange={(e) => setTargetDb(e.target.value)}>
-        <option value="AirQuality">Air Quality</option>
-      </select>
-      <input type="file" onChange={handleFileChange} />
+      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
       <button onClick={handleUpload}>Upload</button>
-      <div>
-        <progress value={progress} max="100" />
-        <p>{status}</p>
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        {status === "complete" && <p style={{ color: "green" }}>✅ Upload complete!</p>}
-      </div>
+      {status && (
+        <div>
+          <p>Status: {status.status}</p>
+          <p>Inserted: {status.inserted}</p>
+          <p>Failed: {status.failed}</p>
+          <p>Total: {status.total}</p>
+          {status.message && <p>{status.message}</p>}
+        </div>
+      )}
     </div>
   );
 }

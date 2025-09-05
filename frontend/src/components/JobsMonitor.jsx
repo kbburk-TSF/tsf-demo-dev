@@ -12,7 +12,6 @@ export default function JobsMonitor() {
   }, []);
 
   const jobList = Object.entries(jobs);
-
   return (
     <div>
       <h2>Jobs Monitor</h2>

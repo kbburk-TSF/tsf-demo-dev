@@ -20,8 +20,6 @@ export default function HealthCheck() {
       <h2>Health Check</h2>
       <p>API: {data.status}</p>
       <p>Database: {data.database}</p>
-      <p>Schema: {data.schema}</p>
-      <p>Rows in AirQuality: {data.rows ?? "N/A"}</p>
       {data.error && <p>Error: {data.error}</p>}
     </div>
   );
