@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from backend.routes import upload, forecast
+from backend.routes import upload
 from backend.database import Base, engine
 from sqlalchemy import text
 
@@ -9,9 +9,7 @@ app = FastAPI()
 def on_startup():
     Base.metadata.create_all(bind=engine)
 
-# Include routers
 app.include_router(upload.router)
-app.include_router(forecast.router)
 
 @app.get("/health")
 def health():

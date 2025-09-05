@@ -1,5 +1,7 @@
 import os, csv, uuid, asyncio, datetime
 from fastapi import APIRouter, UploadFile, Form
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models import AirQuality
 from dateutil import parser as date_parser
@@ -10,90 +12,80 @@ FAILED_DIR = "failed_uploads"
 os.makedirs(FAILED_DIR, exist_ok=True)
 
 def parse_date_safe(value):
-    if not value:
-        return None
+    if not value: return None
     try:
         return date_parser.parse(value, dayfirst=False, yearfirst=False).date()
     except Exception:
         return None
 
 def parse_float_safe(value):
-    try:
-        return float(value)
-    except Exception:
-        return None
+    try: return float(value)
+    except Exception: return None
 
 @router.post("/upload-csv")
 async def upload_csv(file: UploadFile, target_db: str = Form(...)):
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
-        "status": "started",
-        "progress": 0,
-        "inserted": 0,
-        "failed": 0,
-        "total": 0,
-        "message": "Upload started",
-        "created": datetime.datetime.utcnow().isoformat(),
+        "status": "started", "progress": 0, "inserted": 0,
+        "failed": 0, "total": 0, "message": "Upload started",
+        "created": datetime.datetime.utcnow().isoformat(), "finished": None
     }
+    tmp_path = f"temp_{job_id}.csv"
+    with open(tmp_path, "wb") as buffer:
+        buffer.write(await file.read())
 
-    async def process_file(job_id, file, target_db):
-        session = SessionLocal()
-        try:
-            content = await file.read()
-            lines = content.decode("utf-8").splitlines()
-            reader = csv.DictReader(lines)
-
-            total = len(lines) - 1
-            jobs[job_id]["total"] = total
-
-            inserted = 0
-            failed = 0
-            for idx, row in enumerate(reader, 1):
+    async def process_file():
+        session: Session = SessionLocal()
+        failed_rows, total, inserted, failed = [], 0, 0, 0
+        with open(tmp_path, newline="", encoding="utf-8") as csvfile:
+            reader = csv.DictReader(csvfile)
+            field_map = {name.strip().lower(): name for name in reader.fieldnames}
+            for row in reader:
+                total += 1
                 try:
-                    record = AirQuality(
-                        date=parse_date_safe(row.get("date")),
-                        pm25=parse_float_safe(row.get("pm25")),
-                        pm10=parse_float_safe(row.get("pm10")),
-                        o3=parse_float_safe(row.get("o3")),
-                        no2=parse_float_safe(row.get("no2")),
-                        so2=parse_float_safe(row.get("so2")),
-                        co=parse_float_safe(row.get("co")),
-                    )
-                    session.add(record)
-                    inserted += 1
-                except Exception:
-                    failed += 1
-                    with open(os.path.join(FAILED_DIR, f"{job_id}.csv"), "a") as f:
-                        writer = csv.DictWriter(f, fieldnames=row.keys())
-                        if f.tell() == 0:
-                            writer.writeheader()
-                        writer.writerow(row)
-
-                if idx % 100 == 0:
+                    date_val = parse_date_safe(row.get(field_map.get("date local", "Date Local")))
+                    param = row.get(field_map.get("parameter name", "Parameter Name"))
+                    mean_val = parse_float_safe(row.get(field_map.get("arithmetic mean", "Arithmetic Mean")))
+                    site = row.get(field_map.get("local site name", "Local Site Name"))
+                    if not (date_val and param and mean_val is not None):
+                        raise ValueError("Missing or invalid required fields")
+                    aq = AirQuality(date_local=date_val, parameter_name=param,
+                                    arithmetic_mean=mean_val, local_site_name=site)
+                    session.add(aq); inserted += 1
+                except Exception as e:
+                    failed += 1; row["error"] = str(e); failed_rows.append(row)
+                if total % 500 == 0:
                     session.commit()
+                    jobs[job_id].update({"status": "inserting","progress": int((inserted+failed)/total*100),
+                        "inserted": inserted,"failed": failed,"total": total})
+        session.commit(); session.close()
+        if failed_rows:
+            failed_path = os.path.join(FAILED_DIR, f"failed_rows_{job_id}.csv")
+            with open(failed_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=list(failed_rows[0].keys()))
+                f.write(f"# Job ID: {job_id}\n")
+                f.write(f"# Status: complete\n")
+                f.write(f"# Inserted: {inserted}/{total}\n")
+                f.write(f"# Failed: {failed}\n")
+                f.write(f"# Created: {jobs[job_id]['created']}\n")
+                writer.writeheader(); writer.writerows(failed_rows)
+        jobs[job_id].update({"status": "complete","progress": 100,
+            "inserted": inserted,"failed": failed,"total": total,
+            "message": f"{failed} rows failed. Download at /failed/{job_id}" if failed else "All rows inserted",
+            "finished": datetime.datetime.utcnow().isoformat()})
+        os.remove(tmp_path)
 
-                jobs[job_id]["progress"] = round((idx / total) * 100, 2)
-                jobs[job_id]["inserted"] = inserted
-                jobs[job_id]["failed"] = failed
+    asyncio.create_task(process_file())
+    return {"job_id": job_id}
 
-            session.commit()
-            jobs[job_id]["status"] = "completed"
-            jobs[job_id]["message"] = "Upload completed successfully"
-        except Exception as e:
-            jobs[job_id]["status"] = "failed"
-            jobs[job_id]["message"] = str(e)
-        finally:
-            session.close()
-
-    asyncio.create_task(process_file(job_id, file, target_db))
-    return {"job_id": job_id, "status": "started"}
-
-@router.get("/jobs/{job_id}")
-async def get_job(job_id: str):
-    if job_id in jobs:
-        return jobs[job_id]
-    return {"error": "Job not found"}
+@router.get("/upload-status/{job_id}")
+async def upload_status(job_id: str): return jobs.get(job_id, {"status": "unknown job"})
 
 @router.get("/jobs")
-async def list_jobs():
-    return jobs
+async def list_jobs(): return jobs
+
+@router.get("/failed/{job_id}")
+async def get_failed(job_id: str):
+    failed_path = os.path.join(FAILED_DIR, f"failed_rows_{job_id}.csv")
+    if os.path.exists(failed_path): return FileResponse(failed_path, filename=f"failed_rows_{job_id}.csv")
+    return {"error": "No failed rows file found"}
