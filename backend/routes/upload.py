@@ -5,8 +5,10 @@ from fastapi import APIRouter, UploadFile, Form
 from fastapi.responses import JSONResponse, FileResponse
 from dateutil import parser
 
-# keep the router named "jobs" so main.py import still works
-jobs = APIRouter()
+# Define the router — this is what main.py expects
+router = APIRouter()
+# Alias for backward compatibility (if older code imported "jobs")
+jobs = router
 
 FAILED_DIR = "data/failed_uploads"
 os.makedirs(FAILED_DIR, exist_ok=True)
@@ -20,7 +22,7 @@ def normalize_date(value: str) -> str | None:
     except Exception:
         return None
 
-@jobs.post("/upload")
+@router.post("/upload")
 async def upload_csv(dataset: str = Form(...), file: UploadFile = None):
     if not file:
         return JSONResponse({"error": "No file uploaded"}, status_code=400)
@@ -60,7 +62,7 @@ async def upload_csv(dataset: str = Form(...), file: UploadFile = None):
         "failedFile": failed_file_url,
     }
 
-@jobs.get("/download_failed/{filename}")
+@router.get("/download_failed/{filename}")
 async def download_failed(filename: str):
     path = os.path.join(FAILED_DIR, filename)
     if os.path.exists(path):
