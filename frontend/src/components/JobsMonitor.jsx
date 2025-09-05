@@ -1,53 +1,65 @@
-import React, { useState, useEffect } from "react";
-import API_BASE from "../config";
+import React, { useEffect, useState } from "react";
 
 export default function JobsMonitor() {
   const [jobs, setJobs] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  async function fetchJobs() {
+    try {
+      const res = await fetch("/jobs");
+      if (!res.ok) throw new Error("Failed to fetch jobs");
+      const data = await res.json();
+      setJobs(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    fetch(`${API_BASE}/jobs`)
-      .then((res) => res.json())
-      .then(setJobs)
-      .catch(() => setJobs({}));
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 3000); // poll every 3s
+    return () => clearInterval(interval);
   }, []);
 
-  const jobList = Object.entries(jobs);
+  if (loading) return <p>Loading jobs...</p>;
+  if (error) return <p style={{ color: "red" }}>Error: {error}</p>;
+
+  const jobEntries = Object.entries(jobs);
+
+  if (jobEntries.length === 0) {
+    return <p>No jobs running.</p>;
+  }
+
   return (
     <div>
-      <h2>Jobs Monitor</h2>
-      {jobList.length === 0 && <p>No jobs found</p>}
-      {jobList.length > 0 && (
-        <table border="1" cellPadding="5">
-          <thead>
-            <tr>
-              <th>Job ID</th>
-              <th>Status</th>
-              <th>Progress</th>
-              <th>Inserted</th>
-              <th>Total</th>
-              <th>Failed</th>
-              <th>Message</th>
-              <th>Created</th>
-              <th>Finished</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobList.map(([id, job]) => (
-              <tr key={id}>
-                <td>{id}</td>
-                <td>{job.status}</td>
-                <td>{job.progress}%</td>
-                <td>{job.inserted}</td>
-                <td>{job.total}</td>
-                <td>{job.failed}</td>
-                <td>{job.message ?? ""}</td>
-                <td>{job.created}</td>
-                <td>{job.finished ?? ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <h2 className="text-xl font-bold mb-2">Jobs Monitor</h2>
+      <ul className="space-y-2">
+        {jobEntries.map(([jobId, job]) => (
+          <li
+            key={jobId}
+            className="p-3 border rounded shadow-sm bg-gray-50"
+          >
+            <p>
+              <strong>ID:</strong> {jobId}
+            </p>
+            <p>
+              <strong>Status:</strong> {job.status}
+            </p>
+            <p>
+              <strong>Progress:</strong> {job.progress}%
+            </p>
+            <p>
+              <strong>Inserted:</strong> {job.inserted} | <strong>Failed:</strong> {job.failed}
+            </p>
+            <p>
+              <strong>Message:</strong> {job.message}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
