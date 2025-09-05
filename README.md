@@ -43,3 +43,13 @@ On Render startup, the backend will:
 This ensures your TSF Engine demo always has:
 - Schema tables created
 - Seasonal model seeded with initial values
+
+---
+
+# 🚀 Render Start Command
+
+Use this as your Web Service start command on Render to ensure pip is up-to-date and DB is initialized:
+
+```
+pip install --upgrade pip && pip install -r requirements.txt && python backend/init_db.py && uvicorn backend.main:app --host 0.0.0.0 --port 10000
+```

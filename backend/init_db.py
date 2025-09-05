@@ -1,6 +1,9 @@
-import pandas as pd
+import os, sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from backend.db import engine
 from sqlalchemy import text
+import pandas as pd
 
 def init_schema():
     # Load schema.sql
